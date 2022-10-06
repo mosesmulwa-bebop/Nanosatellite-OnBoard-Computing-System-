@@ -1,0 +1,1 @@
+## SD Card must be in FAT-32 format. Use SD Card Formatter or Windows
