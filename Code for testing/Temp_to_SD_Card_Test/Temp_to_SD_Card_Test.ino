@@ -22,15 +22,19 @@
 #define ADC_RESOLUTION 4096.0
 #define PIN_LM35       34 // ESP32 pin GIOP34 (ADC6) connected to LM35
 
+// libraries for the SD Card
+#include "FS.h"
+#include "SD.h"
+#include "SPI.h"
 
+/**********************Settings**/
 // Settings
 static const int msg_queue_len = 5;     // Size of msg_queue
 
 
 
 
-// Message struct: used to wrap strings (not necessary, but it's useful to see
-// how to use structs here)
+// Message struct
 typedef struct Message {
   char date_time[20];
   float temp;
@@ -38,6 +42,53 @@ typedef struct Message {
 
 // Globals
 static QueueHandle_t msg_queue;
+
+
+/*************************************************************************************/
+////// SD CARD FUCNTIONS
+void createDir(fs::FS &fs, const char * path){
+  Serial.printf("Creating Dir: %s\n", path);
+  if(fs.mkdir(path)){
+    Serial.println("Dir created");
+  } else {
+    Serial.println("mkdir failed");
+  }
+}
+
+
+void writeFile(fs::FS &fs, const char * path, const char * message){
+  Serial.printf("Writing file: %s\n", path);
+
+  File file = fs.open(path, FILE_WRITE);
+  if(!file){
+    Serial.println("Failed to open file for writing");
+    return;
+  }
+  if(file.print(message)){
+    Serial.println("File written");
+  } else {
+    Serial.println("Write failed");
+  }
+  file.close();
+}
+
+void appendFile(fs::FS &fs, const char * path, const char * message){
+  Serial.printf("Appending to file: %s\n", path);
+
+  File file = fs.open(path, FILE_APPEND);
+  if(!file){
+    Serial.println("Failed to open file for appending");
+    return;
+  }
+  if(file.print(message)){
+      Serial.println("Message appended");
+  } else {
+    Serial.println("Append failed");
+  }
+  file.close();
+}
+
+
 
 //*****************************************************************************
 // Tasks
@@ -82,9 +133,24 @@ void writeSD(void *parameters) {
   while (1) {
     // See if there's a message in the queue (do not block)
     if (xQueueReceive(msg_queue, (void *)&msg, 0) == pdTRUE) {
+      char first_temp[]= " Collected Temperature(°C): ";
+      float val = msg.temp; 
+      char sz[20] = {' '} ;
+      int val_int = (int) val;   
+      float val_float = (abs(val) - abs(val_int)) * 100000;// compute the integer part of the float
+      int val_fra = (int)val_float;
+      sprintf (sz, "%d.%d", val_int, val_fra); 
+      
+      strcat(first_temp,sz);
+      
+      Serial.println(first_temp);
       Serial.println("Temp in Queue");
       Serial.println(msg.temp);
       Serial.println(msg.date_time);
+      //writeFile(SD, "/stuffy/temp.txt", msg.date_time);
+     appendFile(SD, "/stuffy/temp.txt", msg.date_time);
+     appendFile(SD, "/stuffy/temp.txt", first_temp);
+     appendFile(SD, "/stuffy/temp.txt", " \n");
     }
   
 
@@ -104,7 +170,34 @@ void setup() {
   vTaskDelay(1000 / portTICK_PERIOD_MS);
   Serial.println();
   Serial.println("---FreeRTOS Temp reading and writing to SD Card---");
- 
+
+  //SD Card setup
+  if(!SD.begin(5)){
+    Serial.println("Card Mount Failed");
+    return;
+  }
+  uint8_t cardType = SD.cardType();
+
+  if(cardType == CARD_NONE){
+    Serial.println("No SD card attached");
+    return;
+  }
+
+  Serial.print("SD Card Type: ");
+  if(cardType == CARD_MMC){
+    Serial.println("MMC");
+  } else if(cardType == CARD_SD){
+    Serial.println("SDSC");
+  } else if(cardType == CARD_SDHC){
+    Serial.println("SDHC");
+  } else {
+    Serial.println("UNKNOWN");
+  }
+  Serial.println("Stufffffffffffff");
+  createDir(SD, "/stuffy");
+  writeFile(SD, "/stuffy/temp.txt", "Temperature Values ");
+  appendFile(SD, "/stuffy/temp.txt", "World!\n");
+ /***END SD CARD SETUP***/
 
   // Create queues
   
@@ -122,7 +215,7 @@ void setup() {
   // Start blink task
   xTaskCreatePinnedToCore(writeSD,
                           "Write SD",
-                          1024,
+                          6000,
                           NULL,
                           1,
                           NULL,
