@@ -161,7 +161,8 @@ void testFileIO(fs::FS &fs, const char * path){
 
 void setup(){
   Serial.begin(115200);
-  delay(1000);
+
+  delay(1000); //Delay so we don't miss seial output
   if(!SD.begin(5)){
     Serial.println("Card Mount Failed");
     return;
@@ -187,25 +188,22 @@ void setup(){
   uint64_t cardSize = SD.cardSize() / (1024 * 1024);
   Serial.printf("SD Card Size: %lluMB\n", cardSize);
 
-  listDir(SD, "/", 0);
-  createDir(SD, "/mydir");
-  listDir(SD, "/", 0);
-  removeDir(SD, "/mydir");
-  listDir(SD, "/", 2);
-  writeFile(SD, "/hello.txt", "Hello ");
-  appendFile(SD, "/hello.txt", "World!\n");
-  readFile(SD, "/hello.txt");
-  deleteFile(SD, "/foo.txt");
-  renameFile(SD, "/hello.txt", "/foo.txt");
-  readFile(SD, "/foo.txt");
-  testFileIO(SD, "/test.txt");
-  createDir(SD, "/stuffy");
-  writeFile(SD, "/stuffy/hello.txt", "TEmp Valueso ");
-  Serial.printf("Sr=tufffffffffffffffffffffffffff");
+  
+  writeFile(SD, "/hello.txt", "Temp Values ");
+  appendFile(SD, "/hello.txt", "Collected!\n");
+
+//  char buffer[50];
+//  
+//  for (int i =0; i < 9; i++){
+//    sprintf(buffer, "Temp: %d", i);
+//    appendFile(SD, "/hello.txt", buffer);
+//  }
+
+  Serial.printf("stuffffffffffffffff");
   Serial.printf("Total space: %lluMB\n", SD.totalBytes() / (1024 * 1024));
   Serial.printf("Used space: %lluMB\n", SD.usedBytes() / (1024 * 1024));
 }
 
 void loop(){
-
+    
 }
