@@ -14,5 +14,9 @@ TimerHigh is on autoreload.
 TimerLow is one shot.
 This is to ensure that incase they timeout, timerLow is started by the timerHigh callback. Thus ensuring that the time x between them is consistent.
 
+### Interrupt
+Writing to serial is used as an interrupt that resets the timers before they expire.
+However,any interrupt can be used.
+
 ## Timing Diagram
 ![Timing Diagram](Timers.png "Timing Diagram")
