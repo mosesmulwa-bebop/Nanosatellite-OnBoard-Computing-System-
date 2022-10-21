@@ -1,9 +1,15 @@
 /**
- * FreeRTOS Solution to LED Dimmer
+ *  Timer RST test
  * 
- * Turn on LED when entering serial commands. Turn it off if serial is inactive
- * for 5 seconds.
+ * Turn off LED for some time and then turn it on with another timer that is delayed
+ * If timer are not reset before they timeout
  * 
+ * TimerHigh is behind timerLow
+ * Desired Operation: This is supposed to be used as a watchdog timer to monitor
+ * another system
+ * Essentially, if we don't receive any interrupt from the system within some time. 
+ * We want to reset it
+ * Resetting a system is typi
  * Date: October 20, 2022
  * Author: Moses Mulwa
  * License: 0BSD
@@ -25,29 +31,18 @@ static const TickType_t dim_delay = 5000 / portTICK_PERIOD_MS;
 // Pins (change this if your Arduino board does not have LED_BUILTIN defined)
 static const int led_pin = 18;
 
-
-
 // Globals
-static TimerHandle_t one_shot_timer = NULL;
+static TimerHandle_t timerLow = NULL;
+static TimerHandle_t timerHigh =NULL;
 
 //*****************************************************************************
 // Callbacks
 
 // Turn off LED when timer expires
-void autoDimmerCallback(TimerHandle_t xTimer) {
+void timerLowCallback(TimerHandle_t xTimer) {
   digitalWrite(led_pin, LOW);
 }
-
-//****************************************************************************
-// Interrupts
-void IRAM_ATTR resetTimer()
-{
-  
-  // Start timer (if timer is already running, this will act as
-  // xTimerReset() instead)
-  xTimerStart(one_shot_timer, portMAX_DELAY);
-}
-
+//Turn on LED when timer high expires
 
 //*****************************************************************************
 // Tasks
