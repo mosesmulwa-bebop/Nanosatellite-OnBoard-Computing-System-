@@ -1,7 +1,7 @@
 #include <SPI.h>
 #include <mcp_can.h>
 
-const int spiCSPin = 10; // change this to your cs pin
+const int spiCSPin = 5; // change this to your cs pin
 
 MCP_CAN CAN(spiCSPin);
 

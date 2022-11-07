@@ -3,16 +3,17 @@
 #include <SPI.h>
 #include <mcp_can.h>
 
-const int spiCSPin = 53;
+const int spiCSPin = 5;
 int ledHIGH    = 1;
 int ledLOW     = 0;
 
 MCP_CAN CAN(spiCSPin);
 
 void setup()
-{
+{   
+  
     Serial.begin(115200);
-
+   delay(1000);
     while (CAN_OK != CAN.begin(CAN_500KBPS))
     {
         Serial.println("CAN BUS init Failed");
@@ -21,7 +22,7 @@ void setup()
     Serial.println("CAN BUS Shield Init OK!");
 }
 
-unsigned char stmp[8] = {ledHIGH, 1, 2, 3, ledLOW, 5, 6, 7};
+unsigned char stmp[8] = {4, 1, 2, 3, 5, 5, 6, 7};
     
 void loop()
 {   
