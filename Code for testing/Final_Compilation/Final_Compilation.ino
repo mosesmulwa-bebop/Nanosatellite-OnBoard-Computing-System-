@@ -32,6 +32,10 @@
 
 Adafruit_INA219 ina219;
 
+//***************Definitions for WatchDog
+#define OUTPUT_INTERRUPT_PIN 19
+#define INPUT_INTERRUPT_PIN 18
+
 //Global
 static SemaphoreHandle_t bin_sem = NULL;
 static const int msg_queue_len = 7;     // Size of msg_queue
@@ -46,6 +50,9 @@ typedef struct Message {
 
 // Globals
 static QueueHandle_t msg_queue;
+static const TickType_t timerHigh_delay = 6000 / portTICK_PERIOD_MS;
+static const TickType_t timerLow_delay = 6150 / portTICK_PERIOD_MS;
+static const TickType_t timerComm_delay = 70150 / portTICK_PERIOD_MS;
 
 // Task handles
 static TaskHandle_t read_sensors_handle = NULL;
@@ -55,6 +62,12 @@ static TaskHandle_t communication_handle = NULL;
 bool read_sensors_is_suspended = NULL;
 bool write_sd_card_is_suspended = NULL;
 bool communication_is_suspended = NULL;
+
+// Timer Handles
+static TimerHandle_t timerLow = NULL;
+static TimerHandle_t timerHigh =NULL;
+static TimerHandle_t timerComm =NULL;
+ 
 
 char current_mode = 'n';
 char next_mode = 's';
@@ -104,6 +117,46 @@ void appendFile(fs::FS &fs, const char * path, const char * message){
   file.close();
 }
 
+//**********************TIMER STUFF***********************************
+// Callbacks
+//Turn on LED when timer high expires 
+void timerHighCallback(TimerHandle_t xTimer) {
+  digitalWrite(OUTPUT_INTERRUPT_PIN, HIGH);
+  Serial.println("Timer High expired");
+  
+}
+// Turn off LED when timer expires and start timerHigh
+void timerLowCallback(TimerHandle_t xTimer) {
+  digitalWrite(OUTPUT_INTERRUPT_PIN, LOW);
+  Serial.println("Timer Low expired");
+  xTimerStart(timerHigh, portMAX_DELAY);
+}
+
+void timerCommCallback(TimerHandle_t xTimer) {
+  if(current_mode != 'c'){
+      BaseType_t task_woken = pdFALSE;
+      Serial.println("Timer Comm starting Comms");
+      next_mode = 'c';
+      // Give semaphore to tell task that new mode should be switched
+      xSemaphoreGiveFromISR(bin_sem, &task_woken);
+    }
+}
+
+//variables to keep track of the timing of recent interrupts
+unsigned long button_time = 0;  
+unsigned long last_button_time = 0; 
+
+void IRAM_ATTR isr() {
+    button_time = millis();
+    if (button_time - last_button_time > 250)
+    {
+       Serial.println("Timers being reset");
+       xTimerStart(timerLow, portMAX_DELAY);
+       xTimerStart(timerHigh, portMAX_DELAY);
+       last_button_time = button_time;
+    }
+
+}
 
 
 
@@ -217,13 +270,17 @@ void write_sd_card(void *parameters) {
 
 //Task: Send Communication to COMMS
 void communication(void *parameters) {
-
   
-  while (1) {
     Serial.println(" This is some communication");
     Serial2.println(" This is some communication");
     vTaskDelay(7000 / portTICK_PERIOD_MS);
-  }
+    Serial.println(" This is second communication");
+    Serial2.println(" This is second communication");
+
+    BaseType_t task_woken = pdFALSE;
+    next_mode = 'n';
+    xSemaphoreGiveFromISR(bin_sem, &task_woken);
+  
 }
 
 
@@ -380,6 +437,22 @@ void setup() {
     Serial.println("Failed to find INA219 chip");
     while (1) { delay(10); }
   }
+
+  //*****************Timer setup
+  pinMode(INPUT_INTERRUPT_PIN, INPUT_PULLUP);
+  pinMode(OUTPUT_INTERRUPT_PIN, OUTPUT);
+  attachInterrupt(INPUT_INTERRUPT_PIN, isr, HIGH);
+
+  timerHigh = xTimerCreate( "timer high", timerHigh_delay, pdFALSE, (void *)1, timerHighCallback);  
+  timerLow = xTimerCreate( "timer low", timerLow_delay, pdTRUE,(void *)0,timerLowCallback);
+  timerComm = xTimerCreate( "timer comm", timerComm_delay, pdTRUE,(void *)2,timerCommCallback);  
+
+  
+
+   xTimerStart(timerLow, portMAX_DELAY);
+   xTimerStart(timerHigh, portMAX_DELAY);
+   xTimerStart(timerComm, portMAX_DELAY);
+
 
  // Create semaphore before it is used (in task or ISR)
   bin_sem = xSemaphoreCreateBinary();
