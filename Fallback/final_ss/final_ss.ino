@@ -18,10 +18,6 @@
 #define ADC_RESOLUTION 4096.0
 #define PIN_LM35       34 // ESP32 pin GIOP34 (ADC6) connected to LM35
 
-//************** libraries for the SD Card
-#include "FS.h"
-#include "SD.h"
-#include "SPI.h"
 
 //**************Definitions for Communication
 #define RXp2 16
@@ -82,49 +78,7 @@ char current_mode = 'n';
 char next_mode = 's';
 
 
-//***************************************************************************
-//////// SD CARD FUCNTIONS
-void createDir(fs::FS &fs, const char * path){
-  Serial.printf("Creating Dir: %s\n", path);
-  if(fs.mkdir(path)){
-    Serial.println("Dir created");
-  } else {
-    Serial.println("mkdir failed");
-  }
-}
 
-
-void writeFile(fs::FS &fs, const char * path, const char * message){
-  Serial.printf("Writing file: %s\n", path);
-
-  File file = fs.open(path, FILE_WRITE);
-  if(!file){
-    Serial.println("Failed to open file for writing");
-    return;
-  }
-  if(file.print(message)){
-    Serial.println("File written");
-  } else {
-    Serial.println("Write failed");
-  }
-  file.close();
-}
-
-void appendFile(fs::FS &fs, const char * path, const char * message){
-  Serial.printf("Appending to file: %s\n", path);
-
-  File file = fs.open(path, FILE_APPEND);
-  if(!file){
-    Serial.println("Failed to open file for appending");
-    return;
-  }
-  if(file.print(message)){
-      Serial.println("Message appended");
-  } else {
-    Serial.println("Append failed");
-  }
-  file.close();
-}
 
 //**********************TIMER STUFF***********************************
 // Callbacks
@@ -245,9 +199,9 @@ void write_sd_card(void *parameters) {
       Serial.println(msg.temp);
       Serial.println(msg.date_time);
       //writeFile(SD, "/stuffy/temp.txt", msg.date_time);
-     appendFile(SD, "/stuffy/temp.txt", msg.date_time);
-     appendFile(SD, "/stuffy/temp.txt", first_temp);
-     appendFile(SD, "/stuffy/temp.txt", " \n");
+//     appendFile(SD, "/stuffy/temp.txt", msg.date_time);
+//     appendFile(SD, "/stuffy/temp.txt", first_temp);
+//     appendFile(SD, "/stuffy/temp.txt", " \n");
 
      char curr_ma[] = " Current(mA): ";
      float curr_val = msg.current_mA;
@@ -267,9 +221,9 @@ void write_sd_card(void *parameters) {
      sprintf (sz3, "%d.%d", load_val_int, load_val_fra); 
      strcat(load_vo,sz3);
      
-     appendFile(SD, "/stuffy/current.txt", curr_ma);
-     appendFile(SD, "/stuffy/current.txt", load_vo);
-     appendFile(SD, "/stuffy/current.txt", " \n");
+//     appendFile(SD, "/stuffy/current.txt", curr_ma);
+//     appendFile(SD, "/stuffy/current.txt", load_vo);
+//     appendFile(SD, "/stuffy/current.txt", " \n");
     }
   
 
@@ -279,9 +233,10 @@ void write_sd_card(void *parameters) {
 
 //Task: Blink RGB
 void blink_RGB(void *parameters){
-  analogWrite(RED_PIN, red);
-  analogWrite(GREEN_PIN, green);
-  analogWrite(BLUE_PIN, blue);
+//  analogWrite(RED_PIN, red);
+//  analogWrite(GREEN_PIN, green);
+//  analogWrite(BLUE_PIN, blue);
+Serial.println("LED BLINK");
   vTaskDelay(1000 / portTICK_PERIOD_MS);
 }
 
@@ -294,9 +249,9 @@ void communication(void *parameters) {
     Serial.println(" This is second communication");
     Serial2.println(" This is second communication");
 
-    BaseType_t task_woken = pdFALSE;
-    next_mode = 'n';
-    xSemaphoreGiveFromISR(bin_sem, &task_woken);
+//    BaseType_t task_woken = pdFALSE;
+//    next_mode = 'n';
+//    xSemaphoreGiveFromISR(bin_sem, &task_woken);
   
 }
 
@@ -376,7 +331,7 @@ void modeSwitcher(void *parameters){
      }else if(next_mode == 'e' && current_mode != 'e'){
               Serial.println("Switching to Emergency Mode");
               if(read_sensors_handle == NULL){
-                xTaskCreatePinnedToCore(read_sensors, "Read From Sensors", 3000, NULL, 1, &read_sensors_handle, app_cpu);
+                xTaskCreatePinnedToCore(read_sensors, "Read From Sensors", 6000, NULL, 1, &read_sensors_handle, app_cpu);
               }
               if(write_sd_card_is_suspended != true){
                 vTaskSuspend(write_sd_card_handle);
@@ -394,7 +349,7 @@ void modeSwitcher(void *parameters){
      }else if(next_mode == 'c' && current_mode != 'c'){
               Serial.println("Switching to Communication Mode");
               if(communication_handle == NULL){
-                xTaskCreatePinnedToCore(communication, "Communication", 3000, NULL, 1, &communication_handle, app_cpu);
+                xTaskCreatePinnedToCore(communication, "Communication", 6000, NULL, 1, &communication_handle, app_cpu);
               }
               if(write_sd_card_is_suspended != true){
                 vTaskSuspend(write_sd_card_handle);
@@ -432,23 +387,7 @@ void setup() {
   Serial.println("---FreeRTOS Mode Switching Solution---");
 
 
-  //**********************SD Card setup
-    if(!SD.begin(5)){
-      Serial.println("Card Mount Failed");
-      return;
-    }
-    uint8_t cardType = SD.cardType();
-  
-    if(cardType == CARD_NONE){
-      Serial.println("No SD card attached");
-      return;
-    }
-  
-    createDir(SD, "/stuffy");
-    writeFile(SD, "/stuffy/temp.txt", "Temperature Values ");
-    writeFile(SD, "/stuffy/current.txt", "Current Values ");
-    appendFile(SD, "/stuffy/temp.txt", "World!\n");
- /***END SD CARD SETUP***/
+ 
 
   // Create queues for sensors
   
@@ -484,11 +423,11 @@ void setup() {
  // Create semaphore before it is used (in task or ISR)
   bin_sem = xSemaphoreCreateBinary();
  
-  xTaskCreatePinnedToCore(doCLI, "Do CLI", 1024, NULL, 1, NULL, app_cpu);
-  xTaskCreatePinnedToCore(modeSwitcher, "Mode Switcher", 1024, NULL, 2, NULL, app_cpu);
-  xTaskCreatePinnedToCore(blink_RGB, "Blink RGB", 1024, NULL, 1, NULL, app_cpu);
-  xTaskCreatePinnedToCore(read_sensors, "Read From Sensors", 3000, NULL, 1, &read_sensors_handle, app_cpu);
-  xTaskCreatePinnedToCore(write_sd_card, "Write To SD Card", 6000, NULL, 1, &write_sd_card_handle, app_cpu);
+//  xTaskCreatePinnedToCore(doCLI, "Do CLI", 1024, NULL, 1, NULL, app_cpu);
+//  xTaskCreatePinnedToCore(modeSwitcher, "Mode Switcher", 1024, NULL, 2, NULL, app_cpu);
+  xTaskCreatePinnedToCore(blink_RGB, "Blink RGB", 3000, NULL, 1, NULL, app_cpu);
+//  xTaskCreatePinnedToCore(read_sensors, "Read From Sensors", 6000, NULL, 1, &read_sensors_handle, app_cpu);
+//  xTaskCreatePinnedToCore(write_sd_card, "Write To SD Card", 6000, NULL, 1, &write_sd_card_handle, app_cpu);
   
   // Delete "setup and loop" task
   vTaskDelete(NULL);

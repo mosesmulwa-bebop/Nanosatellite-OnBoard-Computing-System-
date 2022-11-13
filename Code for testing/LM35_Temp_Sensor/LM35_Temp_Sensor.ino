@@ -11,7 +11,7 @@
 #define PIN_LM35       34 // ESP32 pin GIOP34 (ADC6) connected to LM35
 
 void setup() {
-  Serial.begin(9600);
+  Serial.begin(115200);
 }
 
 void loop() {
@@ -34,6 +34,6 @@ void loop() {
   Serial.println("°F");
   }
  
-
+  
   delay(500);
 }

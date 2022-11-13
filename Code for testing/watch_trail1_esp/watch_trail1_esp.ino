@@ -1,6 +1,6 @@
 
-#define OUTPUT_INTERRUPT_PIN 19
-#define INPUT_INTERRUPT_PIN 18
+#define OUTPUT_INTERRUPT_PIN 4
+#define INPUT_INTERRUPT_PIN 15  
 
 
 // Settings
