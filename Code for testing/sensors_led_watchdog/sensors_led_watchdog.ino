@@ -43,7 +43,7 @@ float loadvoltage = 0;
 float power_mW = 0;
 
 // Definitions for LED
-#define RED_PIN 35
+#define RED_PIN 25
 #define GREEN_PIN 32
 #define BLUE_PIN 33
 
@@ -63,6 +63,7 @@ int blue=0;
 static const int msg_queue_len = 5;     // Size of msg_queue
 static const int curr_msg_queue_len = 5;
 static const TickType_t timerComm_delay = 30150 / portTICK_PERIOD_MS;
+static const TickType_t timerCommBlue_delay = 32150 / portTICK_PERIOD_MS;
 static const TickType_t timerHigh_delay = 6000 / portTICK_PERIOD_MS;
 static const TickType_t timerLow_delay = 6150 / portTICK_PERIOD_MS;
 
@@ -70,7 +71,11 @@ static const TickType_t timerLow_delay = 6150 / portTICK_PERIOD_MS;
 static TimerHandle_t timerLow = NULL;
 static TimerHandle_t timerHigh =NULL;
 static TimerHandle_t timerComm =NULL;
+static TimerHandle_t timerCommBlue =NULL;
 
+// led bools
+bool is_blue= false;
+bool is_red = false;
 
 
 // Message struct
@@ -141,16 +146,31 @@ void appendFile(fs::FS &fs, const char * path, const char * message){
 // TIMER CALLBACKS
 
 void timerCommCallback(TimerHandle_t xTimer) {
- Serial.println("Comm Activated"); 
+ Serial.println("--------------Comm Activated----------------------"); 
  Serial.println(all_temps);
  Serial.println(all_currents);
  Serial2.println(all_currents);
  Serial2.println(all_temps);
  Serial2.println(all_loads);
  Serial.println(all_loads);
+ red=0; 
+ green=0;
+ blue= 255;
+ is_blue=true;
  all_temps ="OT,";
  all_currents ="OC,";
  all_loads ="OL,";
+}
+void timerCommBlueCallback(TimerHandle_t xTimer) {
+
+ if(is_blue==true){
+  Serial.println("-----------NORMAL MODE--------------");
+  red=0; 
+  green=255;
+  blue= 0;
+  is_blue=false;
+ }
+
 }
 void timerHighCallback(TimerHandle_t xTimer) {
   digitalWrite(OUTPUT_INTERRUPT_PIN, HIGH);
@@ -199,13 +219,28 @@ void readTemp(void *parameters) {
     float milliVolt = adcVal * (ADC_VREF_mV / ADC_RESOLUTION);
     // convert the voltage to the temperature in °C
     float tempC = milliVolt / 10;
-  
+    if(tempC > 30.0 && is_red !=true){
+          Serial.println("---------Switching to Emergency Mode-----------------");
+          red=255;
+          green=0;
+          blue=0;
+          is_red=true;
+        }
+        if(tempC < 30.0 && is_red ==true){
+          Serial.println("-----------------Back to Normal Mode----------------");
+          red=0;
+          green=255;
+          blue=0;
+          is_red=false;
+        }
     
       
        // print the temperature in the Serial Monitor:
         Serial.print("Temperature: ");
         Serial.print(tempC);   // print the temperature in °C
         Serial.println("°C");
+
+        
         
         // Construct message and send
         strcpy(temp_msg.date_time, some_time);
@@ -347,11 +382,11 @@ void blinkRGB(void *parameters){
     analogWrite(RED_PIN, red);
     analogWrite(GREEN_PIN, green);
     analogWrite(BLUE_PIN, blue);
-    vTaskDelay(1000 / portTICK_PERIOD_MS);
+    vTaskDelay(500 / portTICK_PERIOD_MS);
     analogWrite(RED_PIN, 0);
     analogWrite(GREEN_PIN, 0);
     analogWrite(BLUE_PIN, 0);
-    vTaskDelay(1000 / portTICK_PERIOD_MS);
+    vTaskDelay(500 / portTICK_PERIOD_MS);
   }
   
 }
@@ -426,10 +461,12 @@ void setup() {
   timerHigh = xTimerCreate( "timer high", timerHigh_delay, pdFALSE, (void *)1, timerHighCallback);  
   timerLow = xTimerCreate( "timer low", timerLow_delay, pdTRUE,(void *)0,timerLowCallback);
   timerComm = xTimerCreate( "timer comm", timerComm_delay, pdTRUE,(void *)2,timerCommCallback); 
+  timerCommBlue = xTimerCreate( "timer blue", timerCommBlue_delay, pdTRUE,(void *)3,timerCommBlueCallback); 
 
   xTimerStart(timerLow, portMAX_DELAY);
   xTimerStart(timerHigh, portMAX_DELAY); 
   xTimerStart(timerComm, portMAX_DELAY);
+  xTimerStart(timerCommBlue, portMAX_DELAY);
   
   // Start Temp task
   xTaskCreatePinnedToCore(readTemp,
