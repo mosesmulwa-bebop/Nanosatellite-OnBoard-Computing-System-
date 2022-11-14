@@ -51,11 +51,18 @@ int red=0;
 int green=255;
 int blue=0;
 
+//**************Definitions for Communication
+#define RXp2 16
+#define TXp2 17
+
 /**********************Settings**/
 // Settings
 static const int msg_queue_len = 5;     // Size of msg_queue
 static const int curr_msg_queue_len = 5;
+static const TickType_t timerComm_delay = 30150 / portTICK_PERIOD_MS;
 
+// Timer Handles
+static TimerHandle_t timerComm =NULL;
 
 
 
@@ -73,7 +80,9 @@ typedef struct CurrMessage {
 // Globals
 static QueueHandle_t msg_queue;
 static QueueHandle_t curr_msg_queue;
-
+String all_temps ="OT,";
+String all_currents ="OC,";
+String all_loads ="OL,";
 
 /*************************************************************************************/
 ////// SD CARD FUCNTIONS
@@ -122,6 +131,27 @@ void appendFile(fs::FS &fs, const char * path, const char * message){
 
 
 //*****************************************************************************
+// TIMER CALLBACKS
+
+void timerCommCallback(TimerHandle_t xTimer) {
+ Serial.println("Comm Activated"); 
+ Serial.println(all_temps);
+ Serial.println(all_currents);
+ Serial2.println(all_currents);
+ Serial2.println(all_temps);
+ Serial2.println(all_loads);
+ Serial.println(all_loads);
+ all_temps ="OT,";
+ all_currents ="OC,";
+ all_loads ="OL,";
+}
+
+
+
+
+
+
+
 // Tasks
 
 // Task: read Temperature 
@@ -148,10 +178,14 @@ void readTemp(void *parameters) {
         // Construct message and send
         strcpy(temp_msg.date_time, some_time);
         temp_msg.temp = tempC;
+        String stringTemp = String(tempC, 1);
+        all_temps.concat(stringTemp);
+        String comma = ",";
+        all_temps.concat(comma);
         xQueueSend(msg_queue, (void *)&temp_msg, 10);
 
     
-    vTaskDelay(5000 / portTICK_PERIOD_MS);
+    vTaskDelay(8000 / portTICK_PERIOD_MS);
   }
 }
 
@@ -175,12 +209,20 @@ void readCurrent(void *parameters){
 
     curr_msg.current_mA = current_mA;
     curr_msg.loadvoltage = loadvoltage;
+    String stringmA = String(current_mA, 3);
+    all_currents.concat(stringmA);
+    String comma = ",";
+    all_currents.concat(comma);
+    String stringLoad = String(loadvoltage, 2);
+    all_loads.concat(stringLoad);
+    all_loads.concat(comma);
     xQueueSend(curr_msg_queue, (void *)&curr_msg, 10);
   
-    vTaskDelay(6000 / portTICK_PERIOD_MS);
+    vTaskDelay(9000 / portTICK_PERIOD_MS);
   }
   
 }
+
 
 // Task: write Value in Message Queue to SD Card
 void writeSD(void *parameters) {
@@ -289,6 +331,9 @@ void setup() {
   // Configure Serial
   Serial.begin(115200);
 
+  // Communication setup
+  Serial2.begin(9600, SERIAL_8N1, RXp2, TXp2);
+
   // Wait a moment to start (so we don't miss Serial output)
   vTaskDelay(1000 / portTICK_PERIOD_MS);
   Serial.println();
@@ -339,10 +384,15 @@ void setup() {
   
   msg_queue = xQueueCreate(msg_queue_len, sizeof(Message));
   curr_msg_queue = xQueueCreate(curr_msg_queue_len, sizeof(CurrMessage));
+
+  // Timers
+  timerComm = xTimerCreate( "timer comm", timerComm_delay, pdTRUE,(void *)2,timerCommCallback);  
+  xTimerStart(timerComm, portMAX_DELAY);
+  
   // Start Temp task
   xTaskCreatePinnedToCore(readTemp,
                           "Read temp",
-                          1024,
+                          3000,
                           NULL,
                           1,
                           NULL,
@@ -350,7 +400,7 @@ void setup() {
 
     xTaskCreatePinnedToCore(readCurrent,
                           "Read Current",
-                          2000,
+                          4000,
                           NULL,
                           1,
                           NULL,
