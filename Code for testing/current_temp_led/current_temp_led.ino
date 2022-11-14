@@ -54,6 +54,7 @@ int blue=0;
 /**********************Settings**/
 // Settings
 static const int msg_queue_len = 5;     // Size of msg_queue
+static const int curr_msg_queue_len = 5;
 
 
 
@@ -64,8 +65,14 @@ typedef struct Message {
   float temp;
 } Message;
 
+typedef struct CurrMessage {
+  float current_mA;
+  float loadvoltage;
+} CurrMessage;
+
 // Globals
 static QueueHandle_t msg_queue;
+static QueueHandle_t curr_msg_queue;
 
 
 /*************************************************************************************/
@@ -150,21 +157,27 @@ void readTemp(void *parameters) {
 
 
 void readCurrent(void *parameters){
+  
+  CurrMessage curr_msg;
   while(1){
     shuntvoltage = ina219.getShuntVoltage_mV();
-  busvoltage = ina219.getBusVoltage_V();
-  current_mA = ina219.getCurrent_mA();
-  power_mW = ina219.getPower_mW();
-  loadvoltage = busvoltage + (shuntvoltage / 1000);
-  
-  Serial.print("Bus Voltage:   "); Serial.print(busvoltage); Serial.println(" V");
-  Serial.print("Shunt Voltage: "); Serial.print(shuntvoltage); Serial.println(" mV");
-  Serial.print("Load Voltage:  "); Serial.print(loadvoltage); Serial.println(" V");
-  Serial.print("Current:       "); Serial.print(current_mA); Serial.println(" mA");
-  Serial.print("Power:         "); Serial.print(power_mW); Serial.println(" mW");
-  Serial.println("");
+    busvoltage = ina219.getBusVoltage_V();
+    current_mA = ina219.getCurrent_mA();
+    power_mW = ina219.getPower_mW();
+    loadvoltage = busvoltage + (shuntvoltage / 1000);
+    
+//    Serial.print("Bus Voltage:   "); Serial.print(busvoltage); Serial.println(" V");
+//    Serial.print("Shunt Voltage: "); Serial.print(shuntvoltage); Serial.println(" mV");
+//    Serial.print("Load Voltage:  "); Serial.print(loadvoltage); Serial.println(" V");
+//    Serial.print("Current:       "); Serial.print(current_mA); Serial.println(" mA");
+//    Serial.print("Power:         "); Serial.print(power_mW); Serial.println(" mW");
+//    Serial.println("");
 
-  vTaskDelay(6000 / portTICK_PERIOD_MS);
+    curr_msg.current_mA = current_mA;
+    curr_msg.loadvoltage = loadvoltage;
+    xQueueSend(curr_msg_queue, (void *)&curr_msg, 10);
+  
+    vTaskDelay(6000 / portTICK_PERIOD_MS);
   }
   
 }
@@ -196,6 +209,57 @@ void writeSD(void *parameters) {
      appendFile(SD, "/stuffy/temp.txt", msg.date_time);
      appendFile(SD, "/stuffy/temp.txt", first_temp);
      appendFile(SD, "/stuffy/temp.txt", " \n");
+    }
+  
+
+ 
+  }
+}
+
+void writeCurrSD(void *parameters) {
+
+  CurrMessage msg1;
+
+  // Loop forever
+  while (1) {
+    // See if there's a message in the queue (do not block)
+    if (xQueueReceive(curr_msg_queue, (void *)&msg1, 0) == pdTRUE) {
+      char first_curr[]= " Current(mA): ";
+      float val = msg1.current_mA; 
+      char sz[20] = {' '} ;
+      int val_int = (int) val;   
+      float val_float = (abs(val) - abs(val_int)) * 100000;// compute the integer part of the float
+      int val_fra = (int)val_float;
+      sprintf (sz, "%d.%d", val_int, val_fra); 
+      strcat(first_curr,sz);
+
+      Serial.println(first_curr);
+      Serial.println("Curr in Queue");
+
+      appendFile(SD, "/stuffy/current.txt", first_curr);
+      appendFile(SD, "/stuffy/current.txt", " \n");
+
+      char first_load[]= " Load(V): ";
+      float val1 = msg1.loadvoltage; 
+      char sz1[20] = {' '} ;
+      int val_int1 = (int) val1;   
+      float val_float1 = (abs(val1) - abs(val_int1)) * 100000;// compute the integer part of the float
+      int val_fra1 = (int)val_float1;
+      sprintf (sz1, "%d.%d", val_int1, val_fra1); 
+      strcat(first_load,sz1);
+      
+      
+      Serial.println(first_load);
+      Serial.println("Load Voltage in Queue");
+
+      appendFile(SD, "/stuffy/current.txt", first_load);
+      appendFile(SD, "/stuffy/current.txt", " \n");
+//      Serial.println(msg.temp);
+//      Serial.println(msg.date_time);
+      //writeFile(SD, "/stuffy/temp.txt", msg.date_time);
+//     appendFile(SD, "/stuffy/temp.txt", msg.date_time);
+//     appendFile(SD, "/stuffy/temp.txt", first_temp);
+//     appendFile(SD, "/stuffy/temp.txt", " \n");
     }
   
 
@@ -267,13 +331,14 @@ void setup() {
   
   createDir(SD, "/stuffy");
   writeFile(SD, "/stuffy/temp.txt", "Temperature Values ");
+  writeFile(SD, "/stuffy/current.txt", "Current Values ");
   appendFile(SD, "/stuffy/temp.txt", "World!\n");
  /***END SD CARD SETUP***/
 
   // Create queues
   
   msg_queue = xQueueCreate(msg_queue_len, sizeof(Message));
-
+  curr_msg_queue = xQueueCreate(curr_msg_queue_len, sizeof(CurrMessage));
   // Start Temp task
   xTaskCreatePinnedToCore(readTemp,
                           "Read temp",
@@ -300,13 +365,21 @@ void setup() {
                           NULL,
                           app_cpu);
                           
+  xTaskCreatePinnedToCore(writeCurrSD,
+                          "Write Curr SD",
+                          7000,
+                          NULL,
+                          1,
+                          NULL,
+                          app_cpu);
+                          
   xTaskCreatePinnedToCore(blinkRGB,
                           "Blink RGB",
                           6000,
                           NULL,
                           1,
                           NULL,
-                          app_cpu);                        
+                          pro_cpu);                        
 
   // Delete "setup and loop" task
   vTaskDelete(NULL);
