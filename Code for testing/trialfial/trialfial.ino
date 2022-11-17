@@ -19,7 +19,7 @@
 static const BaseType_t pro_cpu = 0;
 static const BaseType_t app_cpu = 1;
 
-/*Definitions for the Temp Sensor**/
+/*Definitions for the Temp Sensor*/
 #define ADC_VREF_mV    5000.0 // in millivolt
 #define ADC_RESOLUTION 4096.0
 #define PIN_LM35       34 // ESP32 pin GIOP34 (ADC6) connected to LM35
@@ -51,19 +51,25 @@ int red=0;
 int green=255;
 int blue=0;
 
-//******Definitions for Communication
+//**Definitions for Communication*/
 #define RXp2 16
 #define TXp2 17
 
-//*******Definitions for WatchDog
+//***Definitions for WatchDog*/
 #define OUTPUT_INTERRUPT_PIN 4
 #define INPUT_INTERRUPT_PIN 15
-/*******Settings*/
+/*Settings*/
 // Counter and bools for recovery
 int temp_high_counter = 0;
 bool temp_is_high = false;
 #define TEMP_THRESHOLD 30.0 //In Celsisus
-String temp_string ="A";
+
+int current_high_counter = 0;
+bool current_is_high = false;
+#define CURRENT_THRESHOLD 2 //In mA
+
+String emergency_string ="A";
+
 
 
 
@@ -106,7 +112,7 @@ String all_currents ="OC,";
 String all_loads ="OL,";
 String all_obc ="OB,";
 
-/*****************************/
+/*****/
 ////// SD CARD FUCNTIONS
 void createDir(fs::FS &fs, const char * path){
   Serial.printf("Creating Dir: %s\n", path);
@@ -152,11 +158,11 @@ void appendFile(fs::FS &fs, const char * path, const char * message){
 
 
 
-//***************************
+//***
 // TIMER CALLBACKS
 
 void timerCommCallback(TimerHandle_t xTimer) {
- all_obc.concat(temp_string);
+ all_obc.concat(emergency_string);
   
  Serial.println("--------------Comm Activated----------------------"); 
  Serial.println(all_temps);
@@ -178,14 +184,14 @@ void timerCommCallback(TimerHandle_t xTimer) {
 }
 void timerCommBlueCallback(TimerHandle_t xTimer) {
 
- if(is_blue==true && temp_is_high == false){
+ if(is_blue==true && temp_is_high == false && current_is_high == false){
   Serial.println("-----------NORMAL MODE--------------");
   red=0; 
   green=255;
   blue= 0;
   is_blue=false;
  }
- else if(is_blue==true && temp_is_high == true){
+ else{
   Serial.println("-----------EMERGENCY MODE--------------");
   red=255; 
   green=0;
@@ -255,7 +261,7 @@ void readTemp(void *parameters) {
     else if(tempC > TEMP_THRESHOLD && temp_is_high == true){
           temp_high_counter++;
           if (temp_high_counter == 5){
-             temp_string = "B";
+             emergency_string = "B";
           }
     }
     else if(tempC < TEMP_THRESHOLD && temp_is_high ==true){
@@ -264,7 +270,7 @@ void readTemp(void *parameters) {
           blue=0;
           temp_is_high=false;
           temp_high_counter = 0;
-          temp_string ="A";
+          emergency_string ="A";
           Serial.println("-----------------Back to Normal Mode----------------");
           
     }
@@ -308,6 +314,36 @@ void readCurrent(void *parameters){
 //    Serial.print("Current:       "); Serial.print(current_mA); Serial.println(" mA");
 //    Serial.print("Power:         "); Serial.print(power_mW); Serial.println(" mW");
 //    Serial.println("");
+
+    int current_comparison = (int)current_mA;
+    current_comparison = abs(current_comparison);
+//    Serial.print("currentcomparison: ");
+//    Serial.println(currentcomparison);
+
+    if(current_comparison > CURRENT_THRESHOLD && current_is_high == false){
+          red=255;
+          green=0;
+          blue=0;
+          current_high_counter = 1;
+          current_is_high = true;
+          Serial.println("---------Switching to Emergency Mode Due To Current-----------------"); 
+     }
+    else if(current_comparison > CURRENT_THRESHOLD && current_is_high == true){
+          current_high_counter++;
+          if (current_high_counter == 2){
+             emergency_string = "C";
+          }
+    }
+    else if(current_comparison < CURRENT_THRESHOLD && current_is_high == true){
+          red=0;
+          green=255;
+          blue=0;
+          current_is_high=false;
+          current_high_counter = 0;
+          emergency_string ="A";
+          Serial.println("-----------------Back to Normal Mode----------------");
+          
+    }
 
     curr_msg.current_mA = current_mA;
     curr_msg.loadvoltage = loadvoltage;
@@ -425,7 +461,7 @@ void blinkRGB(void *parameters){
   }
   
 }
-//***************************
+//***
 // Main (runs as its own task with priority 1 on core 1)
 
 void setup() {
@@ -480,7 +516,7 @@ void setup() {
   writeFile(SD, "/stuffy/temp.txt", "Temperature Values ");
   writeFile(SD, "/stuffy/current.txt", "Current Values ");
   appendFile(SD, "/stuffy/temp.txt", "World!\n");
- /**END SD CARD SETUP**/
+ /*END SD CARD SETUP*/
 
   // Create queues
   
@@ -488,7 +524,7 @@ void setup() {
   curr_msg_queue = xQueueCreate(curr_msg_queue_len, sizeof(CurrMessage));
 
   // Timers
-  //*******Timer setup
+  //***Timer setup
   pinMode(INPUT_INTERRUPT_PIN, INPUT_PULLUP);
   pinMode(OUTPUT_INTERRUPT_PIN, OUTPUT);
   attachInterrupt(INPUT_INTERRUPT_PIN, isr, HIGH);
