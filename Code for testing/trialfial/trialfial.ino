@@ -19,7 +19,7 @@
 static const BaseType_t pro_cpu = 0;
 static const BaseType_t app_cpu = 1;
 
-/*Definitions for the Temp Sensor*/
+/**Definitions for the Temp Sensor**/
 #define ADC_VREF_mV    5000.0 // in millivolt
 #define ADC_RESOLUTION 4096.0
 #define PIN_LM35       34 // ESP32 pin GIOP34 (ADC6) connected to LM35
@@ -51,14 +51,15 @@ int red=0;
 int green=255;
 int blue=0;
 
-//**Definitions for Communication*/
+//*Definitions for Communication**/
 #define RXp2 16
 #define TXp2 17
 
-//***Definitions for WatchDog*/
+//**Definitions for WatchDog**/
 #define OUTPUT_INTERRUPT_PIN 4
 #define INPUT_INTERRUPT_PIN 15
-/*Settings*/
+
+/**Settings***/
 // Counter and bools for recovery
 int temp_high_counter = 0;
 bool temp_is_high = false;
@@ -69,6 +70,11 @@ bool current_is_high = false;
 #define CURRENT_THRESHOLD 2 //In mA
 
 String emergency_string ="A";
+
+
+int timer_expiry_counter = 0;
+bool timer_is_expired = false;
+String system_string="A";
 
 
 
@@ -111,8 +117,9 @@ String all_temps ="OT,";
 String all_currents ="OC,";
 String all_loads ="OL,";
 String all_obc ="OB,";
+String all_system="OS,";
 
-/*****/
+/***/
 ////// SD CARD FUCNTIONS
 void createDir(fs::FS &fs, const char * path){
   Serial.printf("Creating Dir: %s\n", path);
@@ -158,11 +165,12 @@ void appendFile(fs::FS &fs, const char * path, const char * message){
 
 
 
-//***
+//*
 // TIMER CALLBACKS
 
 void timerCommCallback(TimerHandle_t xTimer) {
  all_obc.concat(emergency_string);
+ all_system.concat(system_string);
   
  Serial.println("--------------Comm Activated----------------------"); 
  Serial.println(all_temps);
@@ -173,6 +181,8 @@ void timerCommCallback(TimerHandle_t xTimer) {
  Serial.println(all_loads);
  Serial2.println(all_obc);
  Serial.println(all_obc);
+ Serial2.println(all_system);
+ Serial.println(all_system);
  red=0; 
  green=0;
  blue= 255;
@@ -181,6 +191,7 @@ void timerCommCallback(TimerHandle_t xTimer) {
  all_currents ="OC,";
  all_loads ="OL,";
  all_obc ="OB,";
+ all_system="OS,";
 }
 void timerCommBlueCallback(TimerHandle_t xTimer) {
 
@@ -201,6 +212,18 @@ void timerCommBlueCallback(TimerHandle_t xTimer) {
 
 }
 void timerHighCallback(TimerHandle_t xTimer) {
+  if(timer_is_expired == false){
+    timer_is_expired=true;
+    timer_expiry_counter =1;
+  }else{
+    timer_expiry_counter ++;
+    if(timer_expiry_counter ==3){
+      system_string ="B";
+    }else if(timer_expiry_counter == 5){
+      system_string = "C";
+    }
+  }
+  
   digitalWrite(OUTPUT_INTERRUPT_PIN, HIGH);
   Serial.println("Timer High expired");
   
@@ -221,6 +244,9 @@ void IRAM_ATTR isr() {
     button_time = millis();
     if (button_time - last_button_time > 250)
     {
+       timer_is_expired = false;
+       timer_expiry_counter = 0;
+        system_string = "A";
        Serial.println("Timers being reset");
        xTimerStart(timerLow, portMAX_DELAY);
        xTimerStart(timerHigh, portMAX_DELAY);
@@ -461,7 +487,7 @@ void blinkRGB(void *parameters){
   }
   
 }
-//***
+//*
 // Main (runs as its own task with priority 1 on core 1)
 
 void setup() {
@@ -516,7 +542,7 @@ void setup() {
   writeFile(SD, "/stuffy/temp.txt", "Temperature Values ");
   writeFile(SD, "/stuffy/current.txt", "Current Values ");
   appendFile(SD, "/stuffy/temp.txt", "World!\n");
- /*END SD CARD SETUP*/
+ /**END SD CARD SETUP***/
 
   // Create queues
   
